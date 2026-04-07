@@ -23,15 +23,17 @@ def main():
     
     # 初回の入力
     inputs = {"messages": [HumanMessage(content=user_input)]}
-    current_score = 0
 
     while True:
+        # 改行のみ、または空白のみの入力は無視する
+        if not user_input.strip():
+            user_input = input("あなた: ")
+            continue
         # グラフの実行（スコア閾値未満ならmentoringで停止、閾値以上ならextractionとsaveまで実行）
         for event in app.stream(inputs, config=config):
             for node_name, output in event.items():
                 if node_name == "analysis":
                     score = output.get('star_score', 0)
-                    current_score = score
                     print(f"\n[AI分析中...] 現在の充実度: {score}/100")
                 
                 if node_name == "mentoring":
