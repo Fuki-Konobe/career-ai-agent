@@ -1,12 +1,13 @@
 services:
-  app:
+  gakuchika-mentor:
     build: .
+    container_name: gakuchika_ui
+    ports:
+      - "8502:8501"
     volumes:
       - .:/app
-    env_file:
-      - .env
-    stdin_open: true
-    tty: true
     environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
       - PYTHONIOENCODING=utf-8:replace
       - PYTHONLEGACYWINDOWSSTDIO=0  # Windows環境の場合に有効
+    tty: true
