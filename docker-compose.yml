@@ -1,0 +1,12 @@
+services:
+  app:
+    build: .
+    volumes:
+      - .:/app
+    env_file:
+      - .env
+    stdin_open: true
+    tty: true
+    environment:
+      - PYTHONIOENCODING=utf-8:replace
+      - PYTHONLEGACYWINDOWSSTDIO=0  # Windows環境の場合に有効

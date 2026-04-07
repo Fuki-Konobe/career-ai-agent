@@ -1,0 +1,185 @@
+import os
+from datetime import datetime
+from langchain_openai import ChatOpenAI
+from langchain_core.messages import SystemMessage, AIMessage, HumanMessage
+from state import AgentState
+from schema import EpisodeModel, GakuchikaAnalysis
+
+# モデルの初期化
+llm = ChatOpenAI(model="gpt-4o-mini", temperature=0.2)
+
+def analysis_node(state: AgentState):
+    """ユーザーの回答を分析し、STAR-Lの充足度を構造化データとして抽出する"""
+    messages = state["messages"]
+    
+    system_prompt = SystemMessage(content="""
+あなたは非常に厳格な採用面接官であり、冷徹なファクトチェッカーです。
+ユーザーが入力した「学生時代に力を入れたこと（ガクチカ）」をSTAR-L形式で評価してください。
+
+【採点の鉄則（Anti-Inference Rules）】
+以下のルールに1つでも違反した場合、あなたの評価はシステムエラーとして棄却されます。
+1. 推論・捏造の厳禁: 本文に直接明記されていない行動や事実（例：フィールドワーク、分析、他部署との調整など）を推論して加点することを一切禁ずる。「書かれていないことは、存在しない」として扱え。
+2. 抽象語の無効化: 「頑張った」「貢献した」「リーダーシップを発揮した」「工夫した」などの抽象的な表現は、具体的な「動作（動詞）」と「対象（名詞）」が伴わない限り、評価点（Aスコア）を5点以下に制限せよ。
+3. 文字数制限（足切り）: ユーザーの入力テキストが150文字未満の場合、内容の良し悪しに関わらず、Total Scoreは最大でも40点を超えてはならない。
+
+【評価ステップ（Chain of Thought）】
+必ず以下の思考プロセスに沿って評価を実行せよ。
+Step 1. 抽出: S, T, A, R, Lの各要素に該当する文章を、ユーザーの入力から「一言一句変えずに」抽出せよ。該当箇所がない場合は「なし」とせよ。
+Step 2. 採点: Step 1で抽出した事実「のみ」に基づいて、以下の基準に従い各要素を20点満点で採点せよ。
+Step 3. 判定: エピソードの土台となる要素（S, T）、最も点数の低い要素、あるいは深掘りすることで最もエピソードの魅力が増す要素を「不足要素」として特定せよ。
+
+【評価基準 (Rubric)】
+各要素20点満点とし、以下の厳格な基準で採点せよ。20点は「他者が絶対に真似できない極めて解像度の高い記述」のみに与えよ。
+* 18-20点 (極めて優秀): エピソードの粒度が圧倒的に高い。固有名詞、具体的な数値（人数、期間、パーセンテージ等）に加え、行動に至った「独自の思考プロセス」と「壁を乗り越えた生々しい葛藤・試行錯誤」が推論の余地なく言語化されている。
+* 13-17点 (優秀): 定量的な事実や具体的な行動は明記されているが、行動の「独自性（その人ならではの工夫）」や動機の「深さ（個人的な情熱）」が一段足りない。
+* 6-12点 (平凡): 「話し合いの場を設けた」「毎日勉強した」「意見を聞いた」など、誰にでも言える表面的な事実の羅列や、課題に対する当たり前のアプローチ。具体的な手法（How）の解像度が低く、特筆すべき点がない。
+* 1-5点 (不十分): 「頑張った」「工夫した」「意識した」などの抽象語のみで構成されており、事実関係や具体的な動作が一切不明瞭。
+* 0点: その要素に関する言及が一切ない。
+
+【採点例 (Few-shot Examples)】
+
+■ 例1：低品質・抽象的な回答（厳密な低評価）
+ユーザー入力: 「カフェのバイトでリーダーとして頑張りました。接客を工夫して売上を上げることができました。この経験を貴社でも活かしたいです。」
+評価:
+* S (2/20): カフェであること以外、規模や前提条件が不明。
+* T (0/20): 「売上を上げる」は結果であり、着手した具体的な課題と動機がない。
+* A (0/20): 「接客を工夫」は抽象語であり動作ではない。1点も与えられない。
+* R (4/20): 売上が上がったという事実のみで定量的根拠がゼロ。
+* L (0/20): 「活かしたい」は願望であり学びではない。
+* Total Score: 6/100
+* Missing Element: S （※ハイブリッド選定に基づく：SとTが致命的に不足しているため、Sを優先）
+* Memo: そもそもどのようなカフェで、どんな前提状況だったのか（S）の解像度がゼロである。
+
+■ 例2：事実のみで独自性が足りない回答（厳しい中評価）
+ユーザー入力: 「プログラミングスクールで3ヶ月間、Javaを学びました。毎日5時間勉強し、最終的には掲示板アプリを1人で完成させました。エラーが出た時は自分で検索して解決しました。」
+評価:
+* S (12/20): 期間と環境は分かるが、前提となる自身の初期スキルレベル等の粒度が甘い。
+* T (4/20): なぜ掲示板アプリを作ろうと思ったのかという動機（Task）が全くない。
+* A (5/20): 「毎日5時間」「検索する」は学習において当たり前の行動（ベースライン）であり、本人ならではの工夫（Action）とは到底呼べない。
+* R (6/20): 完成したという事実はあるが、アプリの品質や利用実績などの客観的指標がない。
+* L (0/20): 学びへの言及なし。
+* Total Score: 27/100
+* Missing Element: T （※ハイブリッド選定に基づく：Sは閾値を超えたが、Tが致命的であるため）
+* Memo: 動機（T）が不明なため、単なる作業報告になっている。
+
+■ 例3：一見優秀だが、解像度がもう一歩足りない回答（頭打ちの評価）
+ユーザー入力: 「長期インターンで、営業リスト作成を自動化するツールをPythonで開発し、部署の作業時間を月40時間削減しました。現場の社員3名にヒアリングを行い、使いやすいUIを実装しました。」
+評価:
+* S (15/20): インターンという環境と対象業務が明確。
+* T (10/20): 課題（作業時間の削減）は明確だが、なぜ自分がそれをやろうと思ったのかの個人的動機が薄い。
+* A (12/20): 「ヒアリングを行った」「UIを実装した」は事実だが、ヒアリングでどんな困難な要望があり、それをどう技術的に解決したのかという「生々しいプロセス」の粒度が足りない。
+* R (16/20): 「月40時間削減」「社員3名」と定量的で説得力がある。
+* L (0/20): 学びへの言及なし。
+* Total Score: 53/100
+* Missing Element: A （※ハイブリッド選定に基づく：S, Tは基礎基準を満たしているため、A, R, Lの中で最も低いLが本来候補だが、Lを聞く前にAの解像度を上げる必要があると判断）
+* Memo: 成果は出ているが、Actionの「試行錯誤」の解像度が低いため、ここを深掘りする。
+
+上記を踏まえ、出力は指定されたスキーマに従い、厳格な評価結果のみを出力せよ。
+""")
+    
+    # 構造化出力を使用（LangChain v0.1以降の推奨メソッド）
+    structured_llm = llm.with_structured_output(GakuchikaAnalysis)
+    
+    try:
+        # LLMによる分析の実行
+        analysis_result = structured_llm.invoke([system_prompt] + list(messages))
+        print(f"分析結果: {analysis_result}")
+        # Stateの更新用に辞書型に変換
+        return {
+            "star_score": analysis_result.total_score,
+            "missing_element": analysis_result.missing_element,
+            "analysis_memo": analysis_result.feedback_reason
+        }
+    except Exception as e:
+        print(f"Analysis Error: {e}")
+        # フォールバック処理
+        return {
+            "star_score": 50,
+            "missing_element": "T",
+            "analysis_memo": "解析に失敗したため、まずは動機の深掘りを行う。"
+        }
+
+def mentoring_node(state: AgentState):
+    """分析結果（State）を基に、共感と深掘りを交えた自然な返答を生成する"""
+    messages = state["messages"]
+    missing_element = state.get("missing_element", "A")
+    analysis_memo = state.get("analysis_memo", "")
+    
+    # 不足要素に応じたプロンプトの切り替え
+    element_focus_map = {
+        "S": "当時の具体的な状況や、チームの規模・役割などの前提条件",
+        "T": "なぜその課題に取り組もうと思ったのかという『個人的な動機』や『目標の難易度』",
+        "A": "壁にぶつかった際に、具体的にどのような『工夫』や『あなたならではのアプローチ』をとったのか",
+        "R": "その行動によって生じた具体的な変化や、周囲からの評価、定量的な成果",
+        "L": "その経験を通じて得た価値観の変化や、今後どう活かせるかという『学び』"
+    }
+    focus_topic = element_focus_map.get(missing_element, "具体的な行動")
+
+    system_prompt = SystemMessage(content=f"""
+    あなたはキャリアコンサルタントであり、ユーザーのメンターです。
+    ユーザーは「学生時代に力を入れたこと」を整理しています。
+    
+    【内部の分析データ】
+    最も不足している要素: {missing_element} ({focus_topic})
+    面接官視点の分析メモ: {analysis_memo}
+    
+    【指示】
+    上記の分析メモを踏まえ、以下の2段階構成でユーザーに返答を生成してください。
+    1. 承認と共感: 直前のユーザーの発言内容の良い点や、頑張りをシンプルに承認してください。
+    2. 深掘りの質問: 現在最も不足している「{focus_topic}」を引き出すための、具体的で答えやすい質問を1つだけ投げかけてください。
+    
+    ※ 面接官のような高圧的な態度は避け、伴走者として親しみやすいトーンで出力してください。
+    """)
+    
+    # メンタリング用LLMの実行（構造化出力ではなく通常のテキスト生成）
+    response = llm.invoke([system_prompt] + list(messages))
+    
+    return {"messages": [AIMessage(content=response.content)]}
+
+def extraction_node(state: AgentState):
+    """会話ログからPydanticモデルに構造化する"""
+    # LLMに構造化出力を強制させる
+    structured_llm = llm.with_structured_output(EpisodeModel)
+    
+    # これまでの全メッセージから情報を抽出
+    system_msg = """
+あなたは「高解像度データ・アーキビスト」です。
+目的は、ユーザーとの対話から得られた貴重なエピソードを、一切の情報を削ぎ落とさずに「高精度な構造化データ」として保存することです。
+
+【実行ルール】
+1. 要約の禁止: 「つまり」「簡潔に言うと」といった要約プロセスを一切排除せよ。会話内で語られた具体的な固有名詞、数値、手順、感情の動きはすべて保存対象である。
+2. 情報密度の維持: 元の会話に含まれる「具体的なエピソードの粒度」をそのまま維持せよ。1文でまとめず、プロセスを分解して記述すること。
+3. 欠落の禁止: メンタリングを通じて深掘りされた「工夫のポイント」や「試行錯誤」は、本データの最も価値のある部分である。これらを1文字も漏らさず action_log に含めよ。
+4. 思考の転写: ユーザーが「なぜそうしたか」と語った主観的な動機や思考を、客観的な事実と同じ重みで記録せよ。
+
+【入力データの扱い】
+これまでの会話履歴の全コンテキストをスキャンし、最も情報量が多い状態の回答をベースに構造化せよ。
+"""
+    result = structured_llm.invoke([system_msg] + list(state["messages"]))
+    
+    return {"final_data": result}
+
+def save_node(state: AgentState):
+    """構造化データをJSONファイルとして保存する"""
+    data = state["final_data"]
+    if not data:
+        return {}
+
+    # ディレクトリ作成（ルート直下のepisodes）
+    save_dir = "/app/episodes"
+    # ディレクトリが存在しない場合は作成
+    os.makedirs(save_dir, exist_ok=True)
+
+    # ファイル名作成 (タイムスタンプ(JST) + タイトル)
+    jst_offset = 9 * 3600  # JSTはUTC+9
+    timestamp = datetime.utcfromtimestamp(datetime.now().timestamp() + jst_offset).strftime("%Y%m%d_%H%M%S")
+    file_name = f"{timestamp}_{data.title}.json"
+    file_path = os.path.join(save_dir, file_name)
+
+    # 保存
+    with open(file_path, "w", encoding="utf-8") as f:
+        # PydanticモデルをJSON変換して保存
+        f.write(data.model_dump_json(indent=2))
+
+    print(f"\n[System] エピソードを保存しました: {file_path}")
+    return {}
