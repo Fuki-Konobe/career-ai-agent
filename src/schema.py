@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import List, Optional
+from typing import List
 
 class GakuchikaAnalysis(BaseModel):
     """STAR-L形式での分析結果の構造化データ"""
@@ -14,8 +14,8 @@ class GakuchikaAnalysis(BaseModel):
     r_score: int = Field(description="結果(Result)の客観性スコア(0-20)")
     l_score: int = Field(description="学び(Learning)の再現性スコア(0-20)")
     total_score: int = Field(description="S,T,A,R,Lの合計スコア(0-100)")
-    missing_element: str = Field(description="エピソードの土台となる要素（S, T）が１２点以下の場合は、その要素のみを指定。その他の場合はS, T, A, R, L の中で最も不足している要素の記号１つのみ。")
-    feedback_reason: str = Field(description="スコアの理由と、不足要素についてなぜ深掘りが必要なのかの分析メモ。土台構築のため閾値未満でSまたはTを優先（ユーザーには見せない内部メモ）")
+    missing_element: str = Field(description="エピソードの土台となる要素（S, T）が１２点以下の場合は、その要素のみを指定。その他の場合はS, T, A, R, L の中で最も不足している要素の記号")
+    feedback_reason: str = Field(description="スコアの理由と、不足要素についてなぜ深掘りが必要なのかの分析メモ。土台構築のため閾値未満でSまたはTを優先して指定した場合は、その理由を詳述すること")
 
 
 class EpisodeModel(BaseModel):

@@ -14,4 +14,6 @@ class AgentState(TypedDict):
     analysis_memo: str
     # 最終的に構造化されたデータ（最初はNone）
     final_data: Optional[EpisodeModel]
+    # ターンカウント（メンタリングのループ回数）
+    turn_count: int
     

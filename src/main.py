@@ -4,9 +4,7 @@ import os
 import uuid
 from langchain_core.messages import HumanMessage
 from graph import create_graph
-from config import SCORE_THRESHOLD
-
-
+from config import SCORE_THRESHOLD, MAX_TURNS
 
 def main():
     app = create_graph()
@@ -22,19 +20,28 @@ def main():
     user_input = input("あなた: ")
     
     # 初回の入力
-    inputs = {"messages": [HumanMessage(content=user_input)]}
+    inputs = {
+        "messages": [HumanMessage(content=user_input)],
+        "star_score": 0,
+        "missing_element": "N/A",
+        "analysis_memo": "",
+        "final_data": None,
+        "turn_count": 0
+    }
 
     while True:
         # 改行のみ、または空白のみの入力は無視する
         if not user_input.strip():
             user_input = input("あなた: ")
             continue
+        
         # グラフの実行（スコア閾値未満ならmentoringで停止、閾値以上ならextractionとsaveまで実行）
         for event in app.stream(inputs, config=config):
             for node_name, output in event.items():
                 if node_name == "analysis":
                     score = output.get('star_score', 0)
-                    print(f"\n[AI分析中...] 現在の充実度: {score}/100")
+                    turn_count = output.get('turn_count', 0)
+                    print(f"\n[AI分析中...] 現在の充実度: {score}/100 (ターン: {turn_count}/{MAX_TURNS})")
                 
                 if node_name == "mentoring":
                     # AIの質問を表示

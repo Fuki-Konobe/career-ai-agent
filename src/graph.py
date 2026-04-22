@@ -2,7 +2,7 @@ from langgraph.graph import StateGraph, END
 from langgraph.checkpoint.memory import MemorySaver
 from state import AgentState
 from nodes import analysis_node, extraction_node, save_node, mentoring_node
-from config import SCORE_THRESHOLD
+from config import SCORE_THRESHOLD, MAX_TURNS
 
 def create_graph():
     workflow = StateGraph(AgentState)
@@ -17,9 +17,18 @@ def create_graph():
     workflow.set_entry_point("analysis")
 
     # 条件付き分岐: スコアが閾値未満ならメンタリング継続、閾値以上なら構造化へ進む
+    # ただし、ターン数が MAX_TURNS に到達したら強制的に extraction へ遷移
+    def routing_logic(state):
+        turn_count = state.get("turn_count", 0)
+        if turn_count >= MAX_TURNS:
+            return "extraction"
+        if state["star_score"] >= SCORE_THRESHOLD:
+            return "extraction"
+        return "mentoring"
+    
     workflow.add_conditional_edges(
         "analysis",
-        lambda state: "mentoring" if state["star_score"] < SCORE_THRESHOLD else "extraction",
+        routing_logic,
         {
             "mentoring": "mentoring",
             "extraction": "extraction"
@@ -32,10 +41,15 @@ def create_graph():
     # saveの後は終了
     workflow.add_edge("save", END)
 
-    # メンタリングから分析へ戻るループ
-    workflow.add_edge("mentoring", "analysis")
+    # メンタリングから分析へ戻るループ（ターンカウント をインクリメント）
+    def increment_turn(state):
+        return {"turn_count": state.get("turn_count", 0) + 1}
+    
+    workflow.add_node("increment_turn", increment_turn)
+    workflow.add_edge("mentoring", "increment_turn")
+    workflow.add_edge("increment_turn", "analysis")
 
-    # 永続化のためのメモリ
+    # SQLite による永続化
     memory = MemorySaver()
 
     # mentoringノードが終わったタイミングで実行を一時停止し、ユーザーの入力を待つ

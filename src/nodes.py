@@ -5,8 +5,8 @@ from langchain_core.messages import SystemMessage, AIMessage, HumanMessage
 from state import AgentState
 from schema import EpisodeModel, GakuchikaAnalysis
 
-# モデルの初期化
-llm = ChatOpenAI(model="gpt-4o-mini", temperature=0.2)
+# モデルの初期化（GPT-4o を使用）
+llm = ChatOpenAI(model="gpt-4o", temperature=0.2)
 
 def analysis_node(state: AgentState):
     """ユーザーの回答を分析し、STAR-Lの充足度を構造化データとして抽出する"""
@@ -100,10 +100,11 @@ Step 3. 判定: エピソードの土台となる要素（S, T）、最も点数
         }
 
 def mentoring_node(state: AgentState):
-    """分析結果（State）を基に、共感と深掘りを交えた自然な返答を生成する"""
+    """分析結果（State）を基に、深掘り質問を生成する"""
     messages = state["messages"]
     missing_element = state.get("missing_element", "A")
     analysis_memo = state.get("analysis_memo", "")
+    turn_count = state.get("turn_count", 0)
     
     # 不足要素に応じたプロンプトの切り替え
     element_focus_map = {
@@ -114,28 +115,31 @@ def mentoring_node(state: AgentState):
         "L": "その経験を通じて得た価値観の変化や、今後どう活かせるかという『学び』"
     }
     focus_topic = element_focus_map.get(missing_element, "具体的な行動")
+    remaining_turns = 10 - turn_count
 
     system_prompt = SystemMessage(content=f"""
-あなたは伴走型のキャリアコンサルタントであり、ユーザーの隠れた魅力を引き出すプロのメンターです。
-目標は、ユーザーのエピソードを「映画のワンシーンのように情景が浮かぶレベル」まで具体化することです。
+あなたは採用面接官兼キャリアコンサルタントです。ユーザーが面接で確実に強みを伝えられるよう、
+不足要素を的確に指摘し、高解像度の具体例へと導くことが役割です。
 
 【内部の分析データ（参照用）】
 不足要素: {missing_element} ({focus_topic})
 分析メモ: {analysis_memo}
 
 【指示】
-以下の3ステップで、ユーザーが「詳細を話したくなる」ような返答を生成してください。
+以下の内容を含めて、客観的かつ建設的な返答を生成してください。
 
-1. 具体的な共感と承認: 
-   直前のユーザーの発言から、特に注目すべき「具体的な行動」や「単語」を1つ以上引用し、その価値を言語化して承認してください。
+1. 肯定と指摘のバランス:
+   直前のユーザーの発言から、良い点を認めたうえで、
+   不足している点を「面接官目線で判定した場合、ここが曖昧だと選考で評価されない」という具体的な理由とともに柔らかい表現で指摘してください。
 
 2. 高解像度を引き出す質問:
    不足要素「{focus_topic}」を埋めるための質問を1つだけ投げかけてください。
-   その際、「数字、固有名詞、その時のセリフ、あるいは具体的な動作（Aをした後にBをした、など）」が含まれるように、回答のヒントを添えてください。
+   「数字、固有名詞、その時のセリフ、あるいは具体的な動作」が含まれるよう、回答のヒントを添えてください。
 
 【制約事項】
-- 高圧的な態度は厳禁。あくまで「あなたの良さを100%伝えるために協力したい」というスタンスを貫くこと。
-- 1回の発言で質問は1つに絞り、ユーザーの思考を分散させないこと。
+- 過度な称賛は避けて、客観的かつ建設的なトーンを維持すること。
+- 見出しや箇条書きは使用せず、段落分けのみをした自然な会話文で返答すること。
+- 1回の発言で質問は1つに絞ること。
 """)
     
     # メンタリング用LLMの実行（構造化出力ではなく通常のテキスト生成）
