@@ -3,11 +3,11 @@ from typing import List
 
 class GakuchikaAnalysis(BaseModel):
     """STAR-L形式での分析結果の構造化データ"""
-    s_content: str = Field(description="本文から抜粋した状況(Situation)の内容（複数可、他の要素と重複可）。言及なければ「なし」")
-    t_content: str = Field(description="本文から抜粋した課題(Task)の内容と動機（複数可、他の要素と重複可）。言及なければ「なし」")
-    a_content: str = Field(description="本文から抜粋した行動と工夫(Action)の内容（複数可、他の要素と重複可）。言及なければ「なし」")
-    r_content: str = Field(description="本文から抜粋した結果(Result)の内容（複数可、他の要素と重複可）。言及なければ「なし」")
-    l_content: str = Field(description="本文から抜粋した学び(Learning)の内容（複数可、他の要素と重複可）。言及なければ「なし」")
+    s_contents: List[str] = Field(description="本文から抜粋した状況(Situation)の内容を含む文章のリスト。言及なければ空リスト")
+    t_contents: List[str] = Field(description="本文から抜粋した課題(Task)の内容を含む文章のリスト。言及なければ空リスト")
+    a_contents: List[str] = Field(description="本文から抜粋した行動と工夫(Action)の内容を含む文章のリスト）。言及なければ空リスト")
+    r_contents: List[str] = Field(description="本文から抜粋した結果(Result)の内容を含む文章のリスト）。言及なければ空リスト")
+    l_contents: List[str] = Field(description="本文から抜粋した学び(Learning)の内容を含む文章のリスト）。言及なければ空リスト")
     s_score: int = Field(description="状況(Situation)の具体性スコア(0-20)")
     t_score: int = Field(description="課題と動機(Task)の深さスコア(0-20)")
     a_score: int = Field(description="行動と工夫(Action)の主体性スコア(0-20)")
@@ -35,3 +35,6 @@ class EpisodeModel(BaseModel):
 
     # 蓄積用メタデータ
     raw_highlights: List[str] = Field(..., description="会話の中から抽出した、特に価値のある生の具体的発言や固有名詞のリスト")
+
+    # エピソードの要約
+    summary: str = Field(..., min_length=250, max_length=300, description="エピソード全体の要約。面接官が一目で理解できるよう、STAR-Lの要素を織り交ぜて簡潔にまとめること") 

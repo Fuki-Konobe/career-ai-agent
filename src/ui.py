@@ -98,28 +98,22 @@ if st.session_state.final_data is not None:
         # タイトルと基本情報
         st.subheader(f"📌 {final_data.title}")
         
-        # STAR-L要素の詳細表示
-        col1, col2 = st.columns(2)
-        with col1:
-            st.markdown("**【状況(Situation)】**")
-            st.write(final_data.situation)
-            st.markdown("**【課題と動機(Task)】**")
-            st.write(final_data.task)
-        
-        with col2:
-            st.markdown("**【結果(Result)】**")
-            st.write(final_data.result)
-            st.markdown("**【学び(Learning)】**")
-            st.write(final_data.learning)
-        
-        # 行動プロセス
+        st.markdown("**【状況(Situation)】**")
+        st.write(final_data.situation)
+        st.markdown("**【課題と動機(Task)】**")
+        st.write(final_data.task)
         st.markdown("**【取組内容(Actions)】**")
-        for i, action in enumerate(final_data.actions, 1):
-            st.write(f"{i}. {action}")
-        
-        st.markdown("**【試行錯誤のプロセス】**")
         st.write(final_data.action_log)
-        
+        st.markdown("**【結果(Result)】**")
+        st.write(final_data.result)
+        st.markdown("**【学び(Learning)】**")
+        st.write(final_data.learning)
+
+        # 300字要約
+        st.markdown("---")
+        st.subheader("**✒️ エピソード要約(300字)**")
+        st.write(final_data.summary)
+
         # 強みと面接フレーズの抽出
         st.markdown("---")
         st.subheader("🌟 抽出されたポイント")
