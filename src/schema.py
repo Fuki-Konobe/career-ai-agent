@@ -37,4 +37,4 @@ class EpisodeModel(BaseModel):
     raw_highlights: List[str] = Field(..., description="会話の中から抽出した、特に価値のある生の具体的発言や固有名詞のリスト")
 
     # エピソードの要約
-    summary: str = Field(..., min_length=250, max_length=300, description="エピソード全体の要約。面接官が一目で理解できるよう、STAR-Lの要素を織り交ぜて簡潔にまとめること") 
+    summary: str = Field(..., min_length=250, max_length=300, description="エピソード全体を300字以内で要約。面接間に対する発言例として、STAR-Lの要素を含めて簡潔且つ自然な口語でまとめること") 
