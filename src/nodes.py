@@ -83,7 +83,21 @@ Step 3. 判定: エピソードの土台となる要素（S, T）、最も点数
     try:
         # LLMによる分析の実行
         analysis_result = structured_llm.invoke([system_prompt] + list(messages))
-        print(f"分析結果: {analysis_result}")
+        print(f"\n{'='*70}")
+        print(f"[ANALYSIS] STAR-L スコア分析")
+        print(f"{'='*70}")
+        print(f"  Situation (状況):    {analysis_result.s_score:2d}/20")
+        print(f"  Task (課題):         {analysis_result.t_score:2d}/20")
+        print(f"  Action (行動):       {analysis_result.a_score:2d}/20")
+        print(f"  Result (結果):       {analysis_result.r_score:2d}/20")
+        print(f"  Learning (学び):     {analysis_result.l_score:2d}/20")
+        print(f"─" * 70)
+        print(f"  総合スコア:          {analysis_result.total_score:3d}/100")
+        print(f"  不足要素:            {analysis_result.missing_element}")
+        print(f"─" * 70)
+        print(f"  フィードバック:")
+        print(f"  {analysis_result.feedback_reason}")
+        print(f"{'='*70}")
         # Stateの更新用に辞書型に変換
         return {
             "star_score": analysis_result.total_score,
@@ -105,6 +119,7 @@ def mentoring_node(state: AgentState):
     missing_element = state.get("missing_element", "A")
     analysis_memo = state.get("analysis_memo", "")
     turn_count = state.get("turn_count", 0)
+    print(f"\n[MENTORING] ターン {turn_count + 1}/10 | 現在の焦点: {missing_element}")
     
     # 不足要素に応じたプロンプトの切り替え
     element_focus_map = {
@@ -115,7 +130,6 @@ def mentoring_node(state: AgentState):
         "L": "その経験を通じて得た価値観の変化や、今後どう活かせるかという『学び』"
     }
     focus_topic = element_focus_map.get(missing_element, "具体的な行動")
-    remaining_turns = 10 - turn_count
 
     system_prompt = SystemMessage(content=f"""
 あなたは採用面接官兼キャリアコンサルタントです。ユーザーが面接で確実に強みを伝えられるよう、
@@ -144,11 +158,25 @@ def mentoring_node(state: AgentState):
     
     # メンタリング用LLMの実行（構造化出力ではなく通常のテキスト生成）
     response = llm.invoke([system_prompt] + list(messages))
+    question_text = response.content
     
-    return {"messages": [AIMessage(content=response.content)]}
+    print(f"\n[MENTORING] ターン {turn_count + 1}/10 | 焦点: {missing_element}")
+    print(f"─" * 70)
+    print(f"  生成された質問:")
+    print(f"  {question_text[:200]}{'...' if len(question_text) > 200 else ''}")
+    print(f"{'='*70}")
+    
+    # ターンカウントをインクリメントして返す
+    return {
+        "messages": [AIMessage(content=question_text)],
+        "turn_count": turn_count + 1
+    }
 
 def extraction_node(state: AgentState):
     """会話ログからPydanticモデルに構造化する"""
+    print(f"\n{'='*60}")
+    print(f"[EXTRACTION] エピソードの構造化を開始します")
+    print(f"{'='*60}")
     # LLMに構造化出力を強制させる
     structured_llm = llm.with_structured_output(EpisodeModel)
     
@@ -168,6 +196,18 @@ def extraction_node(state: AgentState):
 これまでの会話履歴の全コンテキストをスキャンし、最も情報量が多い状態の回答をベースに構造化せよ。
 """
     result = structured_llm.invoke([system_msg] + list(state["messages"]))
+    print(f"[EXTRACTION] 完了")
+    print(f"─" * 70)
+    print(f"  タイトル:          {result.title}")
+    print(f"  要約 (300字):      {result.summary[:100]}...")
+    print(f"  ハイライト数:      {len(result.raw_highlights)} 件")
+    if result.raw_highlights:
+        print(f"  抽出ポイント:")
+        for i, highlight in enumerate(result.raw_highlights[:3], 1):
+            print(f"    {i}. {highlight}")
+        if len(result.raw_highlights) > 3:
+            print(f"    ... 他 {len(result.raw_highlights) - 3} 件")
+    print(f"{'='*70}")
     
     return {"final_data": result}
 
@@ -193,5 +233,14 @@ def save_node(state: AgentState):
         # PydanticモデルをJSON変換して保存
         f.write(data.model_dump_json(indent=2))
 
-    print(f"\n[System] エピソードを保存しました: {file_path}")
+    print(f"\n{'='*70}")
+    print(f"[SAVED] ✓ エピソードを保存しました")
+    print(f"{'='*70}")
+    print(f"  ファイル:          {file_path}")
+    print(f"  タイトル:          {data.title}")
+    print(f"  作成日時:          {file_name.split('_')[0][:8]} {file_name.split('_')[0][8:10]}:{file_name.split('_')[0][10:12]}")
+    print(f"  総合スコア:        完成")
+    print(f"  要約:")
+    print(f"  {data.summary[:80]}...")
+    print(f"{'='*70}")
     return {}

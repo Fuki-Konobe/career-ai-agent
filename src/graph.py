@@ -41,13 +41,8 @@ def create_graph():
     # saveの後は終了
     workflow.add_edge("save", END)
 
-    # メンタリングから分析へ戻るループ（ターンカウント をインクリメント）
-    def increment_turn(state):
-        return {"turn_count": state.get("turn_count", 0) + 1}
-    
-    workflow.add_node("increment_turn", increment_turn)
-    workflow.add_edge("mentoring", "increment_turn")
-    workflow.add_edge("increment_turn", "analysis")
+    # メンタリングから分析へ戻るループ（mentoring_node でターンカウントをインクリメント）
+    workflow.add_edge("mentoring", "analysis")
 
     # SQLite による永続化
     memory = MemorySaver()
