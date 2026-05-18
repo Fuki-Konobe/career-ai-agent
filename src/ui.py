@@ -98,8 +98,9 @@ with st.sidebar:
     # レーダーチャートの描画
     if st.session_state.star_score > 0:
         import plotly.graph_objects as go
-        
+
         categories = ["状況\n(S)", "課題\n(T)", "行動\n(A)", "結果\n(R)", "学び\n(L)"]
+
         scores = [
             st.session_state.s_score,
             st.session_state.t_score,
@@ -107,33 +108,120 @@ with st.sidebar:
             st.session_state.r_score,
             st.session_state.l_score
         ]
-        
-        fig = go.Figure(data=go.Scatterpolar(
-            r=scores,
-            theta=categories,
-            fill='toself',
-            marker=dict(color='#FF6B6B'),
-            line=dict(color='#FF6B6B')
-        ))
-        
+
+        categories_closed = categories + [categories[0]]
+        scores_closed = scores + [scores[0]]
+
+        # Streamlitデフォルト背景に近い灰色
+        bg_color = "#f0f2f6"
+
+        fig = go.Figure()
+
+        fig.add_trace(
+            go.Scatterpolar(
+                r=scores_closed,
+                theta=categories_closed,
+
+                mode='lines+markers',
+
+                fill='toself',
+                fillcolor='rgba(255, 107, 107, 0.20)',
+
+                line=dict(
+                    color='#FF6B6B',
+                    width=3
+                ),
+
+                marker=dict(
+                    size=9,
+                    color='#FF6B6B',
+                    line=dict(
+                        color='white',
+                        width=2
+                    )
+                ),
+
+                hovertemplate=
+                    '<b>%{theta}</b><br>' +
+                    'Score: %{r}<extra></extra>'
+            )
+        )
+
         fig.update_layout(
             polar=dict(
+                bgcolor=bg_color,
+
+                # レーダー領域を拡大
+                domain=dict(
+                    x=[0.18, 0.82],
+                    y=[0.18, 0.82]
+                ),
+
                 radialaxis=dict(
                     visible=True,
+
                     range=[0, 20],
-                    tickvals=[5, 10, 15, 20]
+
+                    tickvals=[5, 10, 15, 20],
+
+                    tickfont=dict(
+                        size=11,
+                        color='gray'
+                    ),
+
+                    gridcolor='rgba(0,0,0,0.10)',
+                    gridwidth=1,
+
+                    linecolor='rgba(0,0,0,0.15)',
+                    linewidth=1,
+
+                    angle=90
+                ),
+
+                angularaxis=dict(
+                    rotation=90,
+                    direction='clockwise',
+
+                    tickfont=dict(
+                        size=13,
+                        color='#333'
+                    ),
+
+                    gridcolor='rgba(0,0,0,0.08)',
+                    linecolor='rgba(0,0,0,0.12)',
+                    linewidth=1
                 )
             ),
+
+            # 背景色統一
+            paper_bgcolor=bg_color,
+
             showlegend=False,
-            height=350,
-            margin=dict(l=50, r=50, t=50, b=50)
+
+            # 高さ縮小
+            height=300,
+
+            # 余白削減
+            margin=dict(
+                l=10,
+                r=10,
+                t=10,
+                b=10
+            ),
+
+            hoverlabel=dict(
+                bgcolor='white',
+                font_size=13
+            )
         )
-        
-        # チャートを読み取り専用に設定し、キャッシング対策を実施
+
         st.plotly_chart(
             fig,
             width='stretch',
-            config={'staticPlot': True},
+            config={
+                'staticPlot': True,
+                'displayModeBar': False
+            },
             key=f"radar_{st.session_state.turn_count}_{st.session_state.star_score}"
         )
     
