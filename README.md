@@ -95,26 +95,29 @@ sequenceDiagram
     participant G as LangGraph<br/>Workflow
     participant L as GPT-4o<br/>LLM
     participant S as State<br/>Management
+    participant UI as Streamlit<br/>Frontend
     participant F as File System<br/>/episodes
 
     U->>G: ① 初回入力（ガクチカ）
     G->>L: ② system_prompt + messages
-    L->>G: ③ GakuchikaAnalysis 構造化出力
-    G->>S: ④ State更新<br/>(score, missing_element)
+    L->>G: ③ GakuchikaAnalysis 構造化出力<br/>(s/t/a/r/l_score含む)
+    G->>S: ④ State更新<br/>(star_score, s/t/a/r/l_score,<br/>missing_element)
+    S->>UI: ⑤ 個別スコアを返却
+    UI->>UI: ⑥ レーダーチャート更新<br/>(Plotly可視化)
     
     alt score < 80
-        G->>L: ⑤ mentoring_prompt生成
-        L->>G: ⑥ 深掘り質問
-        G->>U: ⑦ AIMessage表示
-        U->>G: ⑧ インタラプト後、ユーザー回答
-        G->>S: ⑨ messages Append
-        G->>L: ⑩ Loop: analysis_nodeで再分析
+        G->>L: ⑦ mentoring_prompt生成
+        L->>G: ⑧ 深掘り質問
+        G->>UI: ⑨ AIMessage表示
+        U->>G: ⑩ インタラプト後、ユーザー回答
+        G->>S: ⑪ messages Append
+        G->>L: ⑫ Loop: analysis_nodeで再分析
     else score ≥ 80
-        G->>L: ⑪ extraction_prompt
-        L->>G: ⑫ EpisodeModel 構造化出力
-        G->>S: ⑬ final_data 保存
-        G->>F: ⑭ JSON保存
-        G->>U: ⑮ 完了通知
+        G->>L: ⑬ extraction_prompt
+        L->>G: ⑭ EpisodeModel 構造化出力
+        G->>S: ⑮ final_data 保存
+        G->>F: ⑯ JSON保存
+        G->>UI: ⑰ 完了通知
     end
 ```
 
@@ -122,10 +125,10 @@ sequenceDiagram
 
 | ノード | 入力 | 処理 | 出力 | 特性 |
 |:------:|------|------|------|------|
-| **analysis** | messages + turn履歴 | STAR-L厳格採点 | `(score, missing_element, memo)` | 決定論的（temp=0.2） |
-| **mentoring** | missing_element + memo | 要素特化質問生成 | `AIMessage(質問)` | 建設的なトーン |
-| **extraction** | messages全体 | 詳細構造化 | `EpisodeModel` | 高密度テキスト抽出 |
-| **save** | EpisodeModel | JSON保存 | ファイルシステム操作 | 副作用実行 |
+| **analysis** | messages + turn履歴 | STAR-L厳格採点<br/>GakuchikaAnalysis構造化 | `(star_score, s_score, t_score,`<br/>`a_score, r_score, l_score,`<br/>`missing_element, memo)` | 決定論的（temp=0.2）<br/>個別スコア返却 |
+| **mentoring** | missing_element + memo + turn_count | 要素特化質問生成<br/>ターンカウント更新 | `AIMessage(質問),`<br/>`turn_count + 1` | 建設的なトーン<br/>状態管理 |
+| **extraction** | messages全体 | 詳細構造化<br/>（high-resolution テキスト抽出） | `EpisodeModel` | 高密度テキスト抽出<br/>生の発言保存 |
+| **save** | EpisodeModel | JSON保存<br/>（JST timestamp付き） | ファイルシステム操作 | 副作用実行<br/>永続化 |
 
 ---
 
@@ -356,6 +359,168 @@ def create_graph():
 | **Checkpointer** | セッション再開時に全会話履歴を復元 |
 | **interrupt_after** | ユーザーのタイミングで入力可能（UI友好的） |
 | **Annotated State** | `add_messages` により自動的にメッセージを Append |
+
+---
+
+### 6. UI実装 - レーダーチャート可視化
+
+#### 📊 個別スコアの可視化戦略
+
+**目的:** ユーザーが STAR-L各要素の充足度を直感的に理解できるインタラクティブなダッシュボード
+
+**技術スタック:** Streamlit + Plotly + Pandas
+
+#### 🎨 レーダーチャート（スパイダーチャート）の実装
+
+```python
+import plotly.graph_objects as go
+
+# 個別スコア（各20点満点）
+categories = ["状況\n(S)", "課題\n(T)", "行動\n(A)", "結果\n(R)", "学び\n(L)"]
+scores = [
+    st.session_state.s_score,     # 状況の具体性
+    st.session_state.t_score,     # 課題と動機の深さ
+    st.session_state.a_score,     # 行動と工夫の主体性
+    st.session_state.r_score,     # 結果の客観性
+    st.session_state.l_score      # 学びの再現性
+]
+
+# 閉じたポリゴン（円形）を描画するため、最初の要素を末尾に複製
+categories_closed = categories + [categories[0]]
+scores_closed = scores + [scores[0]]
+
+fig = go.Figure()
+
+fig.add_trace(
+    go.Scatterpolar(
+        r=scores_closed,
+        theta=categories_closed,
+        mode='lines+markers',
+        fill='toself',
+        fillcolor='rgba(255, 107, 107, 0.20)',    # 薄赤色（#FF6B6B の半透明）
+        line=dict(color='#FF6B6B', width=3),
+        marker=dict(size=9, color='#FF6B6B', line=dict(color='white', width=2)),
+        hovertemplate='<b>%{theta}</b><br>Score: %{r}<extra></extra>'
+    )
+)
+
+# レイアウト設定
+fig.update_layout(
+    polar=dict(
+        bgcolor='#f0f2f6',
+        domain=dict(x=[0.18, 0.82], y=[0.18, 0.82]),
+        radialaxis=dict(
+            visible=True,
+            range=[0, 20],                           # 各要素20点満点
+            tickvals=[5, 10, 15, 20],
+            tickfont=dict(size=11, color='gray'),
+            gridcolor='rgba(0,0,0,0.10)',
+            gridwidth=1,
+            linecolor='rgba(0,0,0,0.15)',
+            linewidth=1,
+            angle=90
+        ),
+        angularaxis=dict(
+            rotation=90,
+            direction='clockwise',
+            tickfont=dict(size=13, color='#333'),
+            gridcolor='rgba(0,0,0,0.08)',
+            linecolor='rgba(0,0,0,0.12)',
+            linewidth=1
+        )
+    ),
+    paper_bgcolor='#f0f2f6',
+    showlegend=False,
+    height=350,
+    margin=dict(l=50, r=50, t=50, b=50)
+)
+
+# Streamlit で表示（読み取り専用、ターン毎に更新）
+st.plotly_chart(
+    fig,
+    use_container_width=True,
+    config={'staticPlot': True},                   # ユーザーが軸を編集できないよう制御
+    key=f"radar_{st.session_state.turn_count}_{st.session_state.star_score}"  # キャッシュ無効化
+)
+```
+
+#### 🎯 設計ポイント
+
+| 要素 | 実装 | 効果 |
+|:---:|------|------|
+| **20点満点スケール** | `range=[0, 20]` | 各要素の採点基準と一致 |
+| **5段階刻み** | `tickvals=[5,10,15,20]` | 読みやすさと精密性のバランス |
+| **紅色塗りつぶし** | `fillcolor='rgba(255,107,107,0.20)'` | 進捗の視認性向上 |
+| **読み取り専用** | `config={'staticPlot': True}` | ユーザーが誤って軸を変更しない |
+| **動的キー** | `key=f"radar_{turn}_{score}"` | ターン毎のスコア変化を即座に反映 |
+| **マーカー・ホバー** | `markers + hovertemplate` | 各要素の正確な数値を確認可能 |
+
+#### 📍 UI レイアウト（Streamlit）
+
+```
+┌─────────────────────────────────────┐
+│      🎯 就活エピソード深掘りAIメンター    │
+├─────────────────────────────────────┤
+│                                     │
+│  💬 メンタリング対話               │  ┌─────────────────┐
+│  ┌──────────────────────────────┐  │  │ 📊 分析結果    │
+│  │ 学生: [エピソード1]            │  │  ├─────────────────┤
+│  │                                │  │  │ スコア: 65/100  │
+│  │ メンター: [深掘り質問]          │  │  │                 │
+│  │                                │  │  │ [レーダーチャート]│
+│  │ 学生: [詳細な回答]              │  │  │                 │
+│  │                                │  │  │ 不足要素: A     │
+│  │ メンター: [フォローアップ質問]  │  │  │ ターン: 3/10    │
+│  │                                │  │  │                 │
+│  │ [チャット入力フィールド]       │  │  │ [リセット]      │
+│  └──────────────────────────────┘  │  └─────────────────┘
+│                                     │
+└─────────────────────────────────────┘
+```
+
+**メインエリア:** 会話履歴（時系列に表示、上スクロール不要な仕様）
+
+**サイドバー（固定）:**
+- 📊 総合スコア（100点満点の進捗）
+- 📈 レーダーチャート（5要素の可視化）
+- 📍 不足要素（次のメンタリング焦点）
+- ⏱️ ターン数（MAX_TURNS までの進捗）
+- 🔄 リセットボタン
+
+#### 🔄 State 更新フロー（UIの視点）
+
+```python
+# 1. ユーザーがメッセージ送信
+if prompt := st.chat_input("エピソードを入力してください..."):
+    
+    # 2. グラフを実行し、バックエンドから State を取得
+    final_state = create_graph().invoke(inputs, config)
+    
+    # 3. 個別スコアを session_state に反映
+    st.session_state.s_score = final_state.get("s_score", 0)
+    st.session_state.t_score = final_state.get("t_score", 0)
+    st.session_state.a_score = final_state.get("a_score", 0)
+    st.session_state.r_score = final_state.get("r_score", 0)
+    st.session_state.l_score = final_state.get("l_score", 0)
+    st.session_state.star_score = final_state.get("star_score", 0)
+    st.session_state.turn_count = final_state.get("turn_count", 0)
+    
+    # 4. st.rerun() によるフルリリース → サイドバーのレーダーチャート自動更新
+    st.rerun()
+```
+
+**Data Flow:**
+
+```
+Backend (analysis_node)
+  ↓ [s/t/a/r/l_score 返却]
+State (LangGraph)
+  ↓ [final_state から抽出]
+Streamlit Session State
+  ↓ [st.rerun() で UI 再レンダリング]
+Plotly Radar Chart
+  ↓ [新スコアで自動描画]
+```
 
 ---
 
