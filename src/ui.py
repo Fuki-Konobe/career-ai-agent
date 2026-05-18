@@ -12,6 +12,16 @@ if "messages" not in st.session_state:
     st.session_state.messages = []
 if "star_score" not in st.session_state:
     st.session_state.star_score = 0
+if "s_score" not in st.session_state:
+    st.session_state.s_score = 0
+if "t_score" not in st.session_state:
+    st.session_state.t_score = 0
+if "a_score" not in st.session_state:
+    st.session_state.a_score = 0
+if "r_score" not in st.session_state:
+    st.session_state.r_score = 0
+if "l_score" not in st.session_state:
+    st.session_state.l_score = 0
 if "missing_element" not in st.session_state:
     st.session_state.missing_element = "N/A"
 if "analysis_memo" not in st.session_state:
@@ -44,6 +54,11 @@ if prompt := st.chat_input("エピソードを入力してください..."):
     inputs = {
         "messages": st.session_state.messages,
         "star_score": st.session_state.star_score,
+        "s_score": st.session_state.s_score,
+        "t_score": st.session_state.t_score,
+        "a_score": st.session_state.a_score,
+        "r_score": st.session_state.r_score,
+        "l_score": st.session_state.l_score,
         "missing_element": st.session_state.missing_element,
         "analysis_memo": st.session_state.analysis_memo,
         "final_data": None,
@@ -56,6 +71,11 @@ if prompt := st.chat_input("エピソードを入力してください..."):
     
     # 3. 状態を更新
     st.session_state.star_score = final_state.get("star_score", 0)
+    st.session_state.s_score = final_state.get("s_score", 0)
+    st.session_state.t_score = final_state.get("t_score", 0)
+    st.session_state.a_score = final_state.get("a_score", 0)
+    st.session_state.r_score = final_state.get("r_score", 0)
+    st.session_state.l_score = final_state.get("l_score", 0)
     st.session_state.missing_element = final_state.get("missing_element", "N/A")
     st.session_state.analysis_memo = final_state.get("analysis_memo", "")
     st.session_state.final_data = final_state.get("final_data")
@@ -74,12 +94,60 @@ if prompt := st.chat_input("エピソードを入力してください..."):
 with st.sidebar:
     st.subheader("📊 分析結果")
     st.metric("現在のスコア", f"{st.session_state.star_score} / 100")
+    
+    # レーダーチャートの描画
+    if st.session_state.star_score > 0:
+        import plotly.graph_objects as go
+        
+        categories = ["状況\n(S)", "課題\n(T)", "行動\n(A)", "結果\n(R)", "学び\n(L)"]
+        scores = [
+            st.session_state.s_score,
+            st.session_state.t_score,
+            st.session_state.a_score,
+            st.session_state.r_score,
+            st.session_state.l_score
+        ]
+        
+        fig = go.Figure(data=go.Scatterpolar(
+            r=scores,
+            theta=categories,
+            fill='toself',
+            marker=dict(color='#FF6B6B'),
+            line=dict(color='#FF6B6B')
+        ))
+        
+        fig.update_layout(
+            polar=dict(
+                radialaxis=dict(
+                    visible=True,
+                    range=[0, 20],
+                    tickvals=[5, 10, 15, 20]
+                )
+            ),
+            showlegend=False,
+            height=350,
+            margin=dict(l=50, r=50, t=50, b=50)
+        )
+        
+        # チャートを読み取り専用に設定し、キャッシング対策を実施
+        st.plotly_chart(
+            fig,
+            width='stretch',
+            config={'staticPlot': True},
+            key=f"radar_{st.session_state.turn_count}_{st.session_state.star_score}"
+        )
+    
     st.text(f"不足要素: {st.session_state.missing_element}")
     st.caption(f"ターン数: {st.session_state.turn_count} / {MAX_TURNS}")
     
     if st.button("履歴をリセット", key="reset_btn"):
         st.session_state.messages = []
         st.session_state.star_score = 0
+        st.session_state.s_score = 0
+        st.session_state.t_score = 0
+        st.session_state.a_score = 0
+        st.session_state.r_score = 0
+        st.session_state.l_score = 0
         st.session_state.missing_element = "N/A"
         st.session_state.turn_count = 0
         st.session_state.final_data = None

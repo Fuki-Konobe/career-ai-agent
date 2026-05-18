@@ -98,17 +98,27 @@ Step 3. 判定: エピソードの土台となる要素（S, T）、最も点数
         print(f"  フィードバック:")
         print(f"  {analysis_result.feedback_reason}")
         print(f"{'='*70}")
-        # Stateの更新用に辞書型に変換
+        # Stateの更新用に辞書型に変換（個別スコアを含める）
         return {
             "star_score": analysis_result.total_score,
+            "s_score": analysis_result.s_score,
+            "t_score": analysis_result.t_score,
+            "a_score": analysis_result.a_score,
+            "r_score": analysis_result.r_score,
+            "l_score": analysis_result.l_score,
             "missing_element": analysis_result.missing_element,
             "analysis_memo": analysis_result.feedback_reason
         }
     except Exception as e:
         print(f"Analysis Error: {e}")
-        # フォールバック処理
+        # フォールバック処理（個別スコアを含める）
         return {
             "star_score": 50,
+            "s_score": 10,
+            "t_score": 10,
+            "a_score": 10,
+            "r_score": 10,
+            "l_score": 10,
             "missing_element": "T",
             "analysis_memo": "解析に失敗したため、まずは動機の深掘りを行う。"
         }

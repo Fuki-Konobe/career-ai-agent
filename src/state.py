@@ -6,8 +6,14 @@ from schema import EpisodeModel
 class AgentState(TypedDict):
     # add_messagesにより、既存の履歴に新しい発言が自動で追加(Append)される
     messages: Annotated[Sequence[BaseMessage], add_messages]
-    # STARフレームワークの充足度
+    # STARフレームワークの充足度（総合スコア）
     star_score: int
+    # 個別スコア（各要素20点満点）
+    s_score: int
+    t_score: int
+    a_score: int
+    r_score: int
+    l_score: int
     # 不足している要素（S, T, A, R, Lのいずれか）
     missing_element: str
     # 分析結果の内部メモ（面接官視点の分析）
